@@ -3,6 +3,7 @@ import numpy as np
 from utils.LRScheduler.ExpDecayLR import ExpDecay
 from utils.LRScheduler.CosineAnnelingLR import CosineAnneling
 
+# To get the LR plot against number of epochs as per the training config
 # python LRHelper.py --op_path "./summaries/"
 
 class LRHelper:

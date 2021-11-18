@@ -1,4 +1,3 @@
-import config
 import torch
 import torch.nn as nn
 from models.model_utils import CustomPadTensor

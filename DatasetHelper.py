@@ -38,13 +38,14 @@ class VOCDataset(Dataset):
         return len(self.ann_data)
 
 
-    def __getitem__(self, idx):
-        if isinstance(idx, (tuple, list)):
+    def __getitem__(self, idx_data):
+        if isinstance(idx_data, (tuple, list)):
             # BatchSampler function will call this function with [tuple, list]
-            idx, input_size = idx
+            idx, input_size = idx_data
         else:
             # set the default image size here
             input_size = config.input_size
+            idx = idx_data
         
         ann_line = self.ann_data[idx]
         # [img_path, img_h, img_w, \

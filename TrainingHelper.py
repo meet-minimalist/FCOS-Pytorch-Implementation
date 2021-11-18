@@ -259,3 +259,128 @@ class TrainingHelper:
         train_writer.close()
         test_writer.close()
 
+
+    def overfit_train(self, pretrained_ckpt=None):
+        model = self.get_model()
+        
+        model_stats = summary(model, (1, 3, config.input_size[0], config.input_size[1]))
+        
+        for line in str(model_stats).split('\n'):
+            self.log(line)
+        
+        fcos_loss_fn = self.define_loss()
+        
+        opt = torch.optim.Adam(model.parameters(), lr=0.0, weight_decay=0.0)
+        # Setting lr equal to 0.0 here so that it wont work as per this line.
+        # But we will explicitly set lr for each weights dynamically, at every step.
+        # Same is case for weight_decay, We will calculate L2_regularization_loss on our own separately.
+        # L2 loss will only be calculated for conv-weights only.
+        
+        if config.use_amp:
+            scaler = torch.cuda.amp.GradScaler(enabled=True)
+        
+        if pretrained_ckpt is not None and config.model_type == 'resnet18':
+            self.log("Using pre-trained checkpoint from :".format(pretrained_ckpt))
+            checkpoint = torch.load(pretrained_ckpt)
+            
+            filtered_checkpoint = {}
+            self.log("\nFollowing variables will be restored:")
+            for var_name, var_value in checkpoint.items():
+                if var_name == 'fc.weight' or var_name == 'fc.bias':        
+                    # As these layers change arent there in pretrained model definition
+                    continue
+                if config.backbone == 'resnet':
+                    new_var_name = 'resnet_feat.' + var_name                
+                    # why this prefix? This comes as the model that we created contains a variable resnet_feat 
+                    # which is sequential group of layers containing resnet layers. So all the layers and parameters 
+                    # within it are prefixed with resnet_feat and for restoring resnet pretrained weights 
+                    # we need to update the statedict according to the model architectural definition.
+                    self.log(f"{new_var_name} : {list(var_value.size())}")
+                    filtered_checkpoint[new_var_name] = var_value
+                else:
+                    raise NotImplementedError('Pretrained model restoration is not implemented for ', config.backbone)
+
+            self.log("\n\nFollowing variables will be initialized:")
+            remaining_vars = model.load_state_dict(filtered_checkpoint, strict=False)
+            for var_name in remaining_vars.missing_keys:
+                self.log(var_name)
+            
+        train_writer = SummaryHelper(self.exp_path + "/train/")
+
+        input_x = torch.randn((1,3, config.input_size[0], config.input_size[1])).to(cuda, non_blocking=True)
+        train_writer.add_graph(model, input_x)
+
+        # Dataloader for train and test dataset
+        train_loader = get_train_loader()
+        train_iter = iter(train_loader)
+        batch = next(train_iter)
+        
+        img_tensor = batch['image'][0:1].to(cuda, non_blocking=True)
+        
+        import cv2
+        from utils.transforms.normalize import Normalize
+        orig_img = Normalize(config.converter_normalization_type).denor(img_tensor)
+        orig_img = np.transpose(orig_img[0], [1, 2, 0])
+        orig_img = cv2.cvtColor(orig_img, cv2.COLOR_RGB2BGR)
+        cv2.imwrite(orig_img, "./sample_imgs/overfit_img")
+        exit()
+
+        single_bb_label = batch['bbox'].to(cuda, non_blocking=True)
+
+        for step in range(config.overfit_epochs):
+            model.train()
+
+            opt.zero_grad()                             # Zeroing out gradients before backprop
+                                                        # We cab avoid to zero out if we want accumulate gradients for 
+                                                        # Multiple forward pass and single backward pass.
+            with torch.cuda.amp.autocast(enabled=config.use_amp):
+                predictions = model(img_tensor)
+                # cls_probs, cnt_logits, reg_values = predictions
+                # cls_probs : [[B x 81 x H x W], [B x 81 x H x W], ....]
+                # cnt_logits: [[B x 1 x H x W], [B x 1 x H x W], ....]
+                # reg_values: [[B x 4 x H x W], [B x 4 x H x W], ....]
+
+                loss_total, loss_clsf, loss_cntness, loss_regression, loss_regularizer = \
+                    self.compute_loss_and_map(predictions, single_bb_label, model, fcos_loss_fn)
+                        
+                if config.use_amp:
+                    scaler.scale(loss_total).backward()		# Used when AMP is applied.
+                    scaler.step(opt)
+                    scaler.update()
+                else:
+                    loss_total.backward()
+
+                lr = self.lr_helper.step(step, opt)
+                opt.step()
+
+                if (batch_num+1) % config.loss_logging_frequency == 0:
+                    self.log(f"Epoch: {step+1}/{config.epochs}, Batch No.: {batch_num+1}/{config.train_steps}, " + \
+                            f"Total Loss: {np_cpu(loss_total):.4f}, Loss Cls: {np_cpu(loss_clsf):.4f}, " + \
+                            f"Loss Cntness: {np_cpu(loss_cntness):.4f}, Loss Regression: {np_cpu(loss_regression):.4f}, " + \
+                            f"Loss Reg: {np_cpu(loss_regularizer):.4f}, Accuracy: {0}")
+                    
+                    train_writer.add_summary({'total_loss' : np_cpu(loss_total),
+                                            'loss_cls' : np_cpu(loss_clsf),
+                                            'loss_cntness' : np_cpu(loss_cntness),
+                                            'loss_regression' : np_cpu(loss_regression),
+                                            'loss_reg' : np_cpu(loss_regularizer), 
+                                            # 'accuracy' : np_cpu(accuracy),
+                                            'lr' : lr}, step)
+                
+            
+
+            checkpoint = {
+                'epoch': step + 1,
+                'global_step': step,
+                'model': model.state_dict(),
+                'optimizer': opt.state_dict(),
+            }
+            if config.use_amp:
+                checkpoint['scalar'] = scaler.state_dict()
+
+            # Above code taken from : https://towardsdatascience.com/how-to-save-and-load-a-model-in-pytorch-with-a-complete-example-c2920e617dee
+            self.ckpt_handler.save(checkpoint)
+            self.log("Epoch {} completed. Checkpoint saved.".format(eps+1))
+
+        print("Training Completed.")
+        train_writer.close()

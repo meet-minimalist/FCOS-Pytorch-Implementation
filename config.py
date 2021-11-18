@@ -49,7 +49,9 @@ if not is_deterministic:
 
 
 # ----------------------- Dataset ------------------------ #
-train_csv_path  = "./dataset/ann_files/voc_train_ann.csv"
+# train_csv_path  = "./dataset/ann_files/voc_train_ann.csv"
+train_csv_path  = "./dataset/ann_files/voc_test_ann.csv"
+print("\n\nWARNING: Test set is being used as training set for debugging purpose\n\n")
 test_csv_path   = "./dataset/ann_files/voc_test_ann.csv"
 label_txt       = "./dataset/voc_labels.txt"
 label_dict      = {}
@@ -95,6 +97,7 @@ use_gradient_checkpointing  = True
 
 batch_size              = 24
 epochs                  = 30
+overfit_epochs          = 1000      # Will be used only in case of overfit training
 # input_size              = [800, 1024]            # [H x W]
 input_size              = [400, 512]            # [H x W]
 multi_scale_training    = False

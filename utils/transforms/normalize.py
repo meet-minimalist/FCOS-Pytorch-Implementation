@@ -21,4 +21,17 @@ class Normalize(object):
 
         return sample
 
+    def denorm(self, preprocessed_img):
+        if self.model_type == 'div_255':
+            unpreprocessed_img = (preprocessed_img * 255.0).to(torch.uint8)
+        elif self.model_type == 'imagenet':
+            preprocessed_img[:, 0, :, :] = (preprocessed_img[:, 0, :, :] * 0.229) + 0.485
+            preprocessed_img[:, 1, :, :] = (preprocessed_img[:, 1, :, :] * 0.224) + 0.456
+            preprocessed_img[:, 2, :, :] = (preprocessed_img[:, 2, :, :] * 0.225) + 0.406
+            unpreprocessed_img = (preprocessed_img * 255.0).to(torch.uint8)
+        else:
+            print("DeNormalization type not supported")
+
+        return unpreprocessed_img
+
 
