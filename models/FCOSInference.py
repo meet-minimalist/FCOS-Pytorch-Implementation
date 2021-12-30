@@ -52,19 +52,6 @@ class FCOSInference(nn.Module):
         # cnt_logits: [[B x 1 x H x W], [B x 1 x H x W], ....]
         # reg_values: [[B x 4 x H x W], [B x 4 x H x W], ....]
         
-
-        # def print_data(x):
-        #     x = x.detach().numpy()
-        #     print(f"Min: {np.min(x):.4f}, Max: {np.max(x):.4f}, Mean: {np.mean(x):.4f}, Std: {np.std(x):.4f}")
-
-        
-        # for a, b, c in zip(cls_probs, cnt_logits, reg_values):
-        #     print_data(a)
-        #     print_data(b)
-        #     print_data(c)
-        #     print("="*30)
-        # exit()
-
         predictions = self.post_process([cls_probs, cnt_logits, reg_values], self.strides)
         # predictions : List of [N x 6] tensor for each element in batch
         #             : [x1, y1, x2, y2, cls_prob, cls_id]

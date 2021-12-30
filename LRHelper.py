@@ -1,4 +1,3 @@
-import config
 import numpy as np
 from utils.LRScheduler.ExpDecayLR import ExpDecay
 from utils.LRScheduler.CosineAnnelingLR import CosineAnneling
@@ -7,12 +6,14 @@ from utils.LRScheduler.CosineAnnelingLR import CosineAnneling
 # python LRHelper.py --op_path "./summaries/"
 
 class LRHelper:
-    def __init__(self):
+    def __init__(self, config):
+        # config : Dict contains configuration regarding learning rate
         self.lr_scheduler = config.lr_scheduler
+
         if self.lr_scheduler == 'exp_decay':
-            self.lr_class = ExpDecay()
+            self.lr_class = ExpDecay(config)
         elif self.lr_scheduler == 'cosine_annealing':
-            self.lr_class = CosineAnneling()
+            self.lr_class = CosineAnneling(config)
         else:
             raise NotImplementedError('Invalid lr_scheduler called.')
 
@@ -26,18 +27,19 @@ class LRHelper:
         return self.lr_class.get_lr(g_step)
 
 
-    def plot_lr(self, op_path, eps, steps_per_eps):
-        self.lr_class.plot_lr(op_path, eps, steps_per_eps)                       
+    def plot_lr(self, op_path, eps):
+        self.lr_class.plot_lr(op_path, eps)                       
 
 
 
 if __name__ == '__main__':
     import argparse
+    import config_training
 
     parser = argparse.ArgumentParser(description='Plot LR Curve.')
     parser.add_argument('--op_path', action='store', type=str, help='Output folder where LR tensorboard summary to be stored.')
 
     args = parser.parse_args()
 
-    lr_handler = LRHelper()
-    lr_handler.plot_lr(args.op_path, config.epochs, config.steps_per_epoch)
+    lr_handler = LRHelper(config_training)
+    lr_handler.plot_lr(args.op_path, config_training.epochs)

@@ -5,12 +5,11 @@ import torch
 import shutil
 import datetime
 
-import config
 from utils.Logger import Logger
 
 cpu = torch.device("cpu:0")
 
-def init_training(exp_path=config.exp_path):
+def init_training(exp_path):
     start_time = datetime.datetime.now()
     exp_name = start_time.strftime("%Y_%m_%d_%H_%M_%S")
     cur_exp_path = exp_path + "/" + exp_name

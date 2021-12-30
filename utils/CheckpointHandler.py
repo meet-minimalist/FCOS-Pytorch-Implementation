@@ -1,6 +1,6 @@
 import os
-import glob
 import torch
+from numpy.core.numeric import NaN
 
 class CheckpointHandler:
     def __init__(self, ckpt_path, max_to_keep=3):
@@ -10,9 +10,13 @@ class CheckpointHandler:
 
     def save(self, checkpoint_state):
         eps = checkpoint_state['epoch']
-        test_loss = checkpoint_state['test_loss']
+        try:
+            test_loss = checkpoint_state['test_loss']
+            cur_ckpt_path = os.path.splitext(self.ckpt_path)[0] + "_eps_{}_test_loss_{:.4f}".format(eps, test_loss) + os.path.splitext(self.ckpt_path)[1]
+        except:
+            train_loss = checkpoint_state['train_loss']
+            cur_ckpt_path = os.path.splitext(self.ckpt_path)[0] + "_eps_{}_train_loss_{:.4f}".format(eps, train_loss) + os.path.splitext(self.ckpt_path)[1]
 
-        cur_ckpt_path = os.path.splitext(self.ckpt_path)[0] + "_eps_{}_test_loss_{:.4f}".format(eps, test_loss) + os.path.splitext(self.ckpt_path)[1]
         torch.save(checkpoint_state, cur_ckpt_path)
 
         self.ckpt_path_history.append(cur_ckpt_path)

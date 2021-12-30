@@ -8,7 +8,6 @@ from torchvision import transforms
 from torch.utils.data import RandomSampler
 from imgaug.augmentables.bbs import BoundingBox, BoundingBoxesOnImage
 
-import config
 from utils.transforms.to_tensor import ToTensorOwn
 from utils.transforms.normalize import Normalize
 from utils.transforms.center_crop import CenterCrop
@@ -19,7 +18,7 @@ from utils.BatchSampler import BatchSampler
 
 
 class VOCDataset(Dataset):
-    def __init__(self, csv_path, num_classes, augment=False, basic_transforms=None, augment_transforms=None):
+    def __init__(self, csv_path, num_classes, default_input_size, bgclass_in_label_txt=True, augment=False, basic_transforms=None, augment_transforms=None):
         
         with open(csv_path, 'r') as file:
             csv_file = csv.reader(file)
@@ -29,6 +28,8 @@ class VOCDataset(Dataset):
         np.random.shuffle(self.ann_data)
 
         self.num_classes = num_classes
+        self.default_input_size = default_input_size
+        self.bgclass_in_label_txt = bgclass_in_label_txt
         self.basic_transforms = basic_transforms
         self.augment_transforms = augment_transforms
         self.augment = augment
@@ -44,7 +45,7 @@ class VOCDataset(Dataset):
             idx, input_size = idx_data
         else:
             # set the default image size here
-            input_size = config.input_size
+            input_size = self.default_input_size
             idx = idx_data
         
         ann_line = self.ann_data[idx]
@@ -58,6 +59,8 @@ class VOCDataset(Dataset):
         bboxes = []
         for i in range(num_bboxes):
             x1, y1, x2, y2, cls_id = [int(c) for c in ann_line[5*i+3 : 5*(i+1)+3]]
+            if not self.bgclass_in_label_txt:
+                cls_id = cls_id + 1
             bb = BoundingBox(x1, y1, x2, y2, label=cls_id)
             bboxes.append(bb)
         bbs = BoundingBoxesOnImage(bboxes, shape=cv2.imread(img_path).shape)
@@ -75,20 +78,18 @@ class VOCDataset(Dataset):
 
         return sample
 
+augment_transforms = Augmenter()
 
-
-basic_transforms = transforms.Compose([
+def get_train_loader(config):
+    basic_transforms = transforms.Compose([
                         CenterCrop(),
                         ToTensorOwn(),             # Custom ToTensor transform, converts to CHW from HWC only
                         Normalize(config.normalization_type),
                     ])
 
-augment_transforms = Augmenter()
-
-
-def get_train_loader():
-    train_set = VOCDataset(config.train_csv_path, num_classes=config.num_classes, \
-                                augment=True, basic_transforms=basic_transforms, augment_transforms=augment_transforms)
+    train_set = VOCDataset(config.train_csv_path, num_classes=config.num_classes, default_input_size=config.input_size, \
+                                bgclass_in_label_txt=config.bgclass_in_label_txt, augment=True, basic_transforms=basic_transforms, \
+                                augment_transforms=augment_transforms)
 
     train_loader = torch.utils.data.DataLoader(
                             dataset=train_set, \
@@ -112,9 +113,15 @@ def get_train_loader():
     return train_loader
 
 
-def get_test_loader():
-    test_set = VOCDataset(config.test_csv_path, num_classes=config.num_classes, \
-                                augment=False, basic_transforms=basic_transforms)
+def get_test_loader(config):
+    basic_transforms = transforms.Compose([
+                        CenterCrop(),
+                        ToTensorOwn(),             # Custom ToTensor transform, converts to CHW from HWC only
+                        Normalize(config.normalization_type),
+                    ])
+
+    test_set = VOCDataset(config.test_csv_path, num_classes=config.num_classes, default_input_size=config.input_size, \
+                            bgclass_in_label_txt=config.bgclass_in_label_txt, augment=False, basic_transforms=basic_transforms)
 
     test_loader = torch.utils.data.DataLoader(
                             dataset=test_set, \
@@ -135,9 +142,10 @@ def get_test_loader():
 """
 # Below code is for debugging purpose only.
 if __name__ == "__main__":
-        
-    iterator = iter(get_train_loader())
-    # iterator = iter(get_test_loader())
+
+    import config_training
+    iterator = iter(get_train_loader(config_training))
+    # iterator = iter(get_test_loader(config_training))
     
     for i in range(3):
         batch = next(iterator)

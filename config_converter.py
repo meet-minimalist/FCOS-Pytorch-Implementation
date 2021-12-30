@@ -22,8 +22,8 @@ converter_use_det_head_group_norm   = True
 converter_centerness_on_regression  = True
 add_centerness_in_cls_prob          = True
 max_detection_boxes_num             = 1000
-cls_score_threshold                 = 0.30
-nms_iou_threshold                   = 0.60
+cls_score_threshold                 = 0.4
+nms_iou_threshold                   = 0.3
 # ----------------------------------------------- #                    
 
 

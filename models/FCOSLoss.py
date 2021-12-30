@@ -1,7 +1,7 @@
 
 import torch
 import torch.nn as nn
-from torch.nn.modules.container import T
+
 
 class FCOSLoss(nn.Module):
     def __init__(self, limit_range, central_sampling=True, central_sampling_radius=1.5, \
@@ -23,11 +23,6 @@ class FCOSLoss(nn.Module):
         # cls_probs_pred  : [[B x 81 x H x W], [B x 81 x H x W], ...]
         # cnt_logits_pred : [[B x 1 x H x W], [B x 1 x H x W], ...]
         # reg_values_pred : [[B x 4 x H x W], [B x 4 x H x W], ...]
-        
-        # Below code is only for debug purpose
-        # for _x in cls_probs_pred:
-        #     print(_x.shape, "===")
-        # exit()
         
         comb_cls_probs_pred = []
         comb_cnt_logits_pred = []
@@ -107,7 +102,7 @@ class FCOSLoss(nn.Module):
         r_off = torch.unsqueeze(batch_bb_x2, 1) - torch.unsqueeze(coords_x, 2)
         t_off = torch.unsqueeze(coords_y, 2) - torch.unsqueeze(batch_bb_y1, 1)
         b_off = torch.unsqueeze(batch_bb_y2, 1) - torch.unsqueeze(coords_y, 2)
-        lrtb_off = torch.stack([l_off, r_off, t_off, b_off], -1)    # [B x H*W x M x 4]
+        ltrb_off = torch.stack([l_off, t_off, r_off, b_off], -1)    # [B x H*W x M x 4]
         # [left_x, top_y, right_x, bottom_y]
         
         areas = (l_off + r_off) * (t_off + b_off)            # [B x H*W x M]
@@ -115,8 +110,8 @@ class FCOSLoss(nn.Module):
         # But we will select only one bbox out of these M bboxes for which  
         # the area is lowest. 
         
-        off_min = torch.min(lrtb_off, axis=-1)[0]           # [B x H*W x M]
-        off_max = torch.max(lrtb_off, axis=-1)[0]           # [B x H*W x M]
+        off_min = torch.min(ltrb_off, axis=-1)[0]           # [B x H*W x M]
+        off_max = torch.max(ltrb_off, axis=-1)[0]           # [B x H*W x M]
         
         mask_feat_map_limit = (off_max > limit_range[0]) & (off_max <= limit_range[1])
         # [B x H*W x M]
@@ -125,7 +120,7 @@ class FCOSLoss(nn.Module):
         # The bbox out of M which are padded, for such bbox this area will return
         # -ve and it will be the minimum area out of all the M bboxes. This would 
         # break the next logic. So to prevent it, this mask is introduced.
-         
+        
         if self.central_sampling:
             # Ref. : https://github.com/yqyao/FCOS_PLUS/issues/13#issuecomment-564823086
             img_level_radius = self.central_sampling_radius * stride
@@ -140,6 +135,7 @@ class FCOSLoss(nn.Module):
             center_xy_off = torch.stack([center_x_off, center_y_off], dim=-1)   # [B x H*W x M x 2]
             center_off_max = torch.max(center_xy_off, dim=-1)[0]                # [B x H*W x M] 
             mask_central_sampling = center_off_max < img_level_radius           # [B x H*W X M]
+
         else:
             mask_central_sampling = torch.ones_like(mask_in_gtbbox)     # [B x H*W X M]
         
@@ -154,26 +150,26 @@ class FCOSLoss(nn.Module):
         area_min_idx = torch.min(areas, dim=-1)[1]      # [B x H*W]
         
         # areas : [B x H*W x M]            
-        lrtb_off_mask = torch.zeros_like(areas, dtype=torch.bool).scatter_(\
+        ltrb_off_mask = torch.zeros_like(areas, dtype=torch.bool).scatter_(\
                                 -1, area_min_idx.unsqueeze(dim=-1), 1)
         # This is the binary mask of shape [B x H*W x M] with value 1 for 
         # all the indexes mentioned by area_min_idx at the last dimension which is having
         # M values. So out of those M values at last dimension, only one value which is 
         # specified in area_min_idx will be made to 1.0 and rest will be kept as it is at 0.0
         
-        reg_targets = lrtb_off[lrtb_off_mask]       # [B*H*W x 4]
+        reg_targets = ltrb_off[ltrb_off_mask]       # [B*H*W x 4]
         reg_targets = torch.reshape(reg_targets, (-1, feat_h * feat_w, 4))  # [B x H*W x 4]
         
         classes = torch.unsqueeze(batch_bbox[:, :, 4], dim=1)           # [B x 1 x M]
         classes = torch.broadcast_tensors(classes, areas.long())[0]     # [B x H*W x M]
         
-        cls_targets = classes[lrtb_off_mask]                                # [B*H*W x 1]
+        cls_targets = classes[ltrb_off_mask]                                # [B*H*W x 1]
         cls_targets = torch.reshape(cls_targets, (-1, feat_h * feat_w, 1))  # [B x H*W x 1]
         
         mask_positive_bbox_2 = mask_positive_bbox.long().sum(dim=-1)        # [B x H*W]
         mask_positive_bbox_2 = mask_positive_bbox_2 >= 1
-        
-                
+    
+
         left_right_min = torch.min(reg_targets[:, :, 0], reg_targets[:, :, 2])      # [B x H*W]
         left_right_max = torch.max(reg_targets[:, :, 0], reg_targets[:, :, 2])      # [B x H*W]
         top_bottom_min = torch.min(reg_targets[:, :, 1], reg_targets[:, :, 3])      # [B x H*W]
@@ -186,11 +182,6 @@ class FCOSLoss(nn.Module):
         # Assigning label=0 which is background class, for all such locations 
         # which are negative i.e. locations which dont get associated to any bbox
         # print(cls_targets.shape)
-        
-        # Below code is for debug purpose
-        # b = cls_targets.shape[0]
-        # cls_targets = torch.randint(low=0, high=self.num_classes, size=(b, feat_h * feat_w, 1))
-        # print("Bypass this")
         
         cls_targets = torch.nn.functional.one_hot(cls_targets[:, :, 0].long(), num_classes=self.num_classes)
         # [B x H*W x 1] ---> [B x H*W x 81]
@@ -215,9 +206,9 @@ class FCOSLoss(nn.Module):
         pt = comb_cls_probs_pred * comb_cls_probs_target + \
             (1 - comb_cls_probs_pred) * (1 - comb_cls_probs_target)        
         w = alpha * comb_cls_probs_target + (1 - alpha) * (1 - comb_cls_probs_target)
-        focal_loss = (-1) * w * torch.pow((1 - pt), gamma) * torch.log(pt)
+        focal_loss = (-1) * w * torch.pow((1 - pt), gamma) * torch.log(pt + 1e-10)
         focal_loss = focal_loss.sum(dim=[1, 2])         # [B]
-        
+
         focal_loss = focal_loss / num_pos               # [B]
         return focal_loss.mean()                        # [1]
         
@@ -316,7 +307,6 @@ class FCOSLoss(nn.Module):
                         ((outer_area - union) / (outer_area + 1e-9))    # [n] 
     
         return giou_loss.sum()                                      # [1]
-    
     
     
 if __name__ == '__main__':

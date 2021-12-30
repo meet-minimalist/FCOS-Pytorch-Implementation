@@ -4,6 +4,7 @@ import glob
 import torch
 import imgaug
 import numpy as np
+file_dir = os.path.dirname(__file__)
 
 # --------------- Setting Random Seeds ------------------ #
 def set_deterministic_training():
@@ -49,11 +50,9 @@ if not is_deterministic:
 
 
 # ----------------------- Dataset ------------------------ #
-# train_csv_path  = "./dataset/ann_files/voc_train_ann.csv"
-train_csv_path  = "./dataset/ann_files/voc_test_ann.csv"
-print("\n\nWARNING: Test set is being used as training set for debugging purpose\n\n")
-test_csv_path   = "./dataset/ann_files/voc_test_ann.csv"
-label_txt       = "./dataset/voc_labels.txt"
+train_csv_path  = os.path.join(file_dir, "./dataset/ann_files/voc_train_ann.csv")
+test_csv_path   = os.path.join(file_dir, "./dataset/ann_files/voc_test_ann.csv")
+label_txt       = os.path.join(file_dir, "./dataset/voc_labels.txt")
 label_dict      = {}
 label_dict[0]   = 'background'                      # background class at index 0
 with open(label_txt, 'r') as f: 
@@ -61,6 +60,8 @@ with open(label_txt, 'r') as f:
         label_dict[i] = line.replace('\n', '')
 
 num_classes         = len(label_dict)
+bgclass_in_label_txt= True
+
 normalization_type  = 'imagenet'        # ['imagenet', 'div_255']
 
 with open(train_csv_path, 'r') as f:
@@ -75,8 +76,8 @@ with open(test_csv_path, 'r') as f:
 use_amp 				= False				 # AMP will give reduced memory footprint and reduced computation time for GPU having Tensor Cores 
 backbone                = 'resnet18'         # ['resnet50', 'resnet18']
 # backbone                = 'resnet50'         # ['resnet50', 'resnet18']
-backbone_ckpt           = './pretrained_ckpt/resnet18-5c106cde.pth'
-# backbone_ckpt           = './pretrained_ckpt/resnet50-19c8e357.pth'
+backbone_ckpt           = os.path.join(file_dir, './pretrained_ckpt/resnet18-5c106cde.pth')
+# backbone_ckpt           = os.path.join(file_dir, './pretrained_ckpt/resnet50-19c8e357.pth')
 freeze_backend          = [False, False, False, False]      
 # To freeze features upto P2, P3, P4, P5 level in backbone, 4 boolean values are provided.  
 fpn_features            = 256
@@ -97,7 +98,7 @@ use_gradient_checkpointing  = True
 
 batch_size              = 24
 epochs                  = 30
-overfit_epochs          = 1000      # Will be used only in case of overfit training
+overfit_epochs          = 300      # Will be used only in case of overfit training
 # input_size              = [800, 1024]            # [H x W]
 input_size              = [400, 512]            # [H x W]
 multi_scale_training    = False
@@ -121,7 +122,7 @@ weight_init_method      = 'msra'        # ['msra', 'xavier_normal']
 # Xavier initialization works better for layers with sigmoid activation.
 # Ref: https://stats.stackexchange.com/a/319849
 
-exp_path = "./summaries/"
+exp_path = os.path.join(file_dir, "./summaries/")
 os.makedirs(exp_path, exist_ok=True)
 
 train_steps = int(np.ceil(train_len / batch_size))
@@ -134,7 +135,7 @@ loss_logging_frequency  = (train_steps // 100) if 0 < (train_steps // 100) < 100
 warm_up         = True
 warm_up_eps     = 2
 init_lr         = 0.001
-lr_scheduler    = 'cosine_annealing'    # ['exp_decay', 'cosine_annealing']
+lr_scheduler    = 'exp_decay'    # ['exp_decay', 'cosine_annealing']
 lr_exp_decay    = 0.94                  # Only for 'burn_in_decay'. Set this such that at the end of training (= after "epochs" number of iterations), the lr will be of scale 1e-6 or 1e-7.
 steps_per_epoch = train_steps
 burn_in_steps   = steps_per_epoch * warm_up_eps

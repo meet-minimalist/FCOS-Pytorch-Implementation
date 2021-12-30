@@ -61,17 +61,6 @@ class PostProcessor(nn.Module):
         comb_reg_values = torch.cat(comb_reg_values, dim=2)     # [B x 4 x sum(H*W)]
 
 
-        # def print_data(x):
-        #     x = x.detach().numpy()
-        #     print(f"Min: {np.min(x):.4f}, Max: {np.max(x):.4f}, Mean: {np.mean(x):.4f}, Std: {np.std(x):.4f}")
-
-        
-        # print_data(comb_cls_probs)
-        # print_data(comb_cnt_logits)
-        # print_data(comb_reg_values)
-        # exit()
-
-
         comb_coordinates = torch.cat(comb_coordinates, dim=1)   # [1 x sum(H*W) x 2]
         comb_coordinates = torch.Tensor.permute(comb_coordinates, (0, 2, 1))   # [1 x 2 x sum(H*W)]
 
